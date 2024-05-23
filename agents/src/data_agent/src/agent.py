@@ -46,15 +46,26 @@ def generate_response(prompt,llm):
     response,role = get_response([prompt],llm)
     messages_ui.append({"role":role,"content":response})
     return response,role
+    
+def chat(request,llm):
+    try:
+        data = request.get_json()
+        if 'prompt' in data:
+            prompt = data['prompt']
+            response,role = generate_response(prompt,llm)
+            return jsonify({"role":role,"content":response})
+        else:
+            return jsonify({"error": "Missing required parameters"}), 400
+
+    except Exception as e:
+        return jsonify({"Error": str(e)}), 500 
+    
 
 def get_messages():
     global messages_ui
-    return messages_ui
+    return jsonify({"messages":messages_ui})
 
 def clear_messages():
     global messages_ui
     messages_ui=[]
-
-    
-
-    
+    return jsonify({"response":"successfully cleared message history"})

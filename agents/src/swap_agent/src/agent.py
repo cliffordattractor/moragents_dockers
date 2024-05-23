@@ -1,14 +1,15 @@
+from flask import Flask, request, jsonify
 from llama_cpp import Llama
 from llama_cpp.llama_tokenizer import LlamaHFTokenizer
 import requests
 from swap_agent.src import tools
-from swap_agent.src.tools import InsufficientFundsError, TokenNotFoundError
+from swap_agent.src.tools import InsufficientFundsError, TokenNotFoundError, SwapNotPossibleError
 from config import Config
 import json
 
 
 tools_provided = tools.get_tools()
-messages = []
+messages = [{'role':"assistant","content":"This highly experimental chatbot is not intended for making important decisions, and its responses are generated based on incomplete data and algorithms that may evolve rapidly. By using this chatbot, you acknowledge that you use it at your own discretion and assume all risks associated with its limitations and potential errors."}]
 context = []
 
 def api_request_url(method_name, query_params, chain_id):
@@ -53,7 +54,7 @@ def get_response(message, chain_id, wallet_address,llm):
             try:
                 res, role = tools.swap_coins(tok1, tok2, float(value), chain_id, wallet_address)
                 messages.append({"role": role, "content": res})
-            except (tools.InsufficientFundsError, tools.TokenNotFoundError) as e:
+            except (tools.InsufficientFundsError, tools.TokenNotFoundError,tools.SwapNotPossibleError) as e:
                 context = []
                 messages.append({"role": "assistant", "content": str(e)})
                 return str(e), "assistant"
@@ -100,14 +101,107 @@ def generate_response(prompt,chainid,walletAddress,llm):
     response,role = get_response(context,chainid,walletAddress,llm)
     return response,role
 
+    
+def chat(request,llm):
+    try:
+        data = request.get_json()
+        if 'prompt' in data:
+            prompt = data['prompt']
+            wallet_address = data['wallet_address']
+            chain_id = data['chain_id']
+            response, role = generate_response(prompt, chain_id, wallet_address,llm)
+            return jsonify({"role": role, "content": response})
+        else:
+            return jsonify({"error": "Missing required parameters"}), 400
+
+    except Exception as e:
+        return jsonify({"Error": str(e)}), 500     
+
+
+def tx_status(request):
+    try:
+        data = request.get_json()
+        if 'status' in data:
+            prompt = data['status']
+            tx_hash = data.get('tx_hash', '')
+            tx_type = data.get('tx_type', '')
+            response = get_status(prompt, tx_hash, tx_type)
+            return jsonify({"role": "assistant", "content": response})
+        else:
+            return jsonify({"error": "Missing required parameters"}), 400
+
+    except Exception as e:
+        return jsonify({"Error": str(e)}), 500 
+
 def get_messages():
     global messages
-    return messages
+    try:
+        return jsonify({"messages": messages})
+    except Exception as e:
+        return jsonify({"Error": str(e)}), 500 
     
 def clear_messages():
     global messages, context
-    messages = []
-    context = []
+    try:
+        messages = [{'role':"assistant","content":"This highly experimental chatbot is not intended for making important decisions, and its responses are generated based on incomplete data and algorithms that may evolve rapidly. By using this chatbot, you acknowledge that you use it at your own discretion and assume all risks associated with its limitations and potential errors."}]
+        context = []
+        return jsonify({"response": "successfully cleared message history"})
+    except Exception as e:
+        return jsonify({"Error": str(e)}), 500 
 
+def get_allowance(request):
+    try:
+        data = request.get_json()
+        if 'tokenAddress' in data:
+            token = data['tokenAddress']
+            wallet_address = data['walletAddress']
+            chain_id = data["chain_id"]
+            res = check_allowance(token, wallet_address, chain_id)
+            return jsonify({"response": res})
+        else:
+            return jsonify({"error": "Missing required parameters"}), 400
+
+    except Exception as e:
+        return jsonify({"Error": str(e)}), 500 
+
+def approve(request):
+    try:
+        data = request.get_json()
+        if 'tokenAddress' in data:
+            token = data['tokenAddress']
+            chain_id = data['chain_id']
+            amount = data['amount']
+            res = approve_transaction(token, chain_id, amount)
+            return jsonify({"response": res})
+        else:
+            return jsonify({"error": "Missing required parameters"}), 400
+
+    except Exception as e:
+        return jsonify({"Error": str(e)}), 500 
     
-    
+def swap(request):   
+    try:
+        data = request.get_json()
+        if 'src' in data:  
+            token1 = data['src']
+            token2 = data['dst']
+            wallet_address = data['walletAddress']
+            amount = data['amount']
+            slippage = data['slippage']
+            chain_id = data['chain_id']
+            swap_params = {
+                "src": token1,
+                "dst": token2,
+                "amount": amount,
+                "from": wallet_address,
+                "slippage": slippage,
+                "disableEstimate": False,
+                "allowPartialFill": False,
+            }
+            swap_transaction = build_tx_for_swap(swap_params, chain_id)
+            return swap_transaction
+        else:
+            return jsonify({"error": "Missing required parameters"}), 400
+
+    except Exception as e:
+        return jsonify({"Error": str(e)}), 500 

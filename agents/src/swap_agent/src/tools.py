@@ -11,6 +11,10 @@ class InsufficientFundsError(Exception):
 class TokenNotFoundError(Exception):
     pass
 
+class SwapNotPossibleError(Exception):
+    pass
+
+
 def search_tokens(query, chain_id, limit=1, ignore_listed="false"):
     endpoint = f"/v1.2/{chain_id}/search"
     params = {
@@ -115,7 +119,7 @@ def swap_coins(token1, token2, amount, chain_id, wallet_address):
         t2_address = '' if t2_a == Config.INCH_NATIVE_TOKEN_ADDRESS else t2_a
         t2_quote = convert_to_readable_unit(web3, int(price), t2_address)
     else:
-        return "We can't generate a quote. Please ensure you're on the correct network.","assistant"
+        raise SwapNotPossibleError("Failed to generate a quote. Please ensure you're on the correct network.")
 
     return {
         "dst": t2_id,
